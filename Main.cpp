@@ -1,291 +1,356 @@
+#include <algorithm> // std::shuffle
+#include <array>
+#include <cassert>
+#include <ctime> // std::time
 #include <iostream>
-#include <string>
-#include <vector>
-#include <limits> // For clearing input
-#include <random> // To generate numbers for card draws
-#include <chrono> // To seed number generation
+#include <random> // std::mt19937
 
+// Maximum score before losing.
+constexpr int g_maximumScore{ 21 };
 
+// Minimum score that the dealer has to have.
+constexpr int g_minimumDealerScore{ 17 };
 
-// These constants represent the number of decks to be drawn from, the maximum hand value and the dealer's hit threshold
-// You can change their values to change how the game plays
-constexpr int numberOfDecks{ 1 };
-constexpr int maxHandValue{ 21 };
-constexpr int dealerMaxValue{ 17 };
-
-// This generator will give us a random number corresponding to a card
-std::mt19937 mt{ static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()) };
-std::uniform_int_distribution<> randomCard{ 1, 52 * numberOfDecks };
-
-// This function will allow us to clear any extraneous input
-void ignoreLine()
+class Card
 {
-	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
+public:
 
-// This function will allow the player to make choices by entering 1 for yes or 0 for no
-int getInput()
+    enum Suit
+    {
+        club,
+        diamond,
+        heart,
+        spade,
+
+        max_suits
+    };
+
+    enum Rank
+    {
+        rank_2,
+        rank_3,
+        rank_4,
+        rank_5,
+        rank_6,
+        rank_7,
+        rank_8,
+        rank_9,
+        rank_10,
+        rank_jack,
+        rank_queen,
+        rank_king,
+        rank_ace,
+
+        max_ranks
+    };
+
+private:
+    int m_rank;
+    int m_suit;
+
+public:
+    Card() = default;
+
+    Card(Rank rank, Suit suit)
+        : m_rank{ rank }, m_suit{ suit }
+    {
+    }
+
+    void print() const
+    {
+        switch (m_rank)
+        {
+        case rank_2:      std::cout << '2';   break;
+        case rank_3:      std::cout << '3';   break;
+        case rank_4:      std::cout << '4';   break;
+        case rank_5:      std::cout << '5';   break;
+        case rank_6:      std::cout << '6';   break;
+        case rank_7:      std::cout << '7';   break;
+        case rank_8:      std::cout << '8';   break;
+        case rank_9:      std::cout << '9';   break;
+        case rank_10:     std::cout << "10";   break;
+        case rank_jack:   std::cout << "Jack";   break;
+        case rank_queen:  std::cout << "Queen";   break;
+        case rank_king:   std::cout << "King";   break;
+        case rank_ace:    std::cout << "Ace";   break;
+        default:
+            std::cout << '?';
+            break;
+        }
+
+        std::cout << " of ";
+
+        switch (m_suit)
+        {
+        case club:       std::cout << "Clubs";   break;
+        case diamond:    std::cout << "Diamonds";   break;
+        case heart:      std::cout << "Hearts";   break;
+        case spade:      std::cout << "Spades";   break;
+        default:
+            std::cout << '?';
+            break;
+        }
+    }
+
+    int value() const
+    {
+        switch (m_rank)
+        {
+        case rank_2:        return 2;
+        case rank_3:        return 3;
+        case rank_4:        return 4;
+        case rank_5:        return 5;
+        case rank_6:        return 6;
+        case rank_7:        return 7;
+        case rank_8:        return 8;
+        case rank_9:        return 9;
+        case rank_10:       return 10;
+        case rank_jack:     return 10;
+        case rank_queen:    return 10;
+        case rank_king:     return 10;
+        case rank_ace:      return 11;
+        default:
+            assert(false && "should never happen");
+            return 0;
+        }
+    }
+
+};
+
+class Deck
 {
-	while (true)
-	{
-		std::cout << "Enter 1 for yes or 0 for no: ";
-		int input{};
-		std::cin >> input;
-		ignoreLine();
+private:
+    std::array<Card, 52> m_deck;
+    int m_cardIndex{};
 
-		switch (input)
-		{
-		case 0:
-		case 1:
-			return input;
-		default:
-			std::cerr << "Sorry, that input is invalid. Please try again. \n";
-		}
-	}
-}
+public:
+    Deck()
+    {
+        int i{};
 
-//This function prints the name of a card based on its number in the deck
-void cardName(int num)
+        for (int suit{}; suit < static_cast<int>(Card::Suit::max_suits); ++suit)
+        {
+            for (int rank{ 0 }; rank < static_cast<int>(Card::Rank::max_ranks); ++rank)
+            {
+                m_deck[i] = Card(static_cast<Card::Rank>(rank), static_cast<Card::Suit>(suit));
+                ++i;
+            }
+        }
+    }
+
+    void print()
+    {
+        for (const Card& card : m_deck)
+        {
+            card.print();
+            std::cout << ", ";
+        }
+
+        std::cout << '\n';
+    }
+
+    void shuffle()
+    {
+        static std::mt19937 mt{ static_cast<std::mt19937::result_type>(std::time(nullptr)) };
+
+        std::shuffle(m_deck.begin(), m_deck.end(), mt);
+
+        m_cardIndex = 0;
+    }
+
+    const Card& deal()
+    {
+        return m_deck[m_cardIndex++];
+    }
+};
+
+class Player
 {
-	std::string suit{};
-	std::string label{};
+private:
+    int m_score{};
+    int m_playerAces{};
 
-	if (num % 52 <= 13)
-		suit = "Hearts";
-	else if (num % 52 <= 26)
-		suit = "Spades";
-	else if (num % 52 <= 39)
-		suit = "Diamonds";
-	else
-		suit = "Clubs";
+public:
+    Card drawCard(Deck& deck)
+    {
+        Card card = deck.deal();
+        int value{ card.value() };
 
-	switch (num % 13)
-	{
-	case 1:
-		label = "Ace";
-		break;
-	case 11:
-		label = "Jack";
-		break;
-	case 12:
-		label = "Queen";
-		break;
-	case 0:
-		label = "King";
-		break;
-	default:
-		label = std::to_string(num % 13);
-		break;
-	}
+        if (value == 11)
+            ++m_playerAces;
 
-	std::cout << label << " of " << suit << '\n';
-}
+        m_score += value;
 
-// This function takes a players current point total and the value of a new card and returns the value of the new card
-int cardValue(int num)
+        return card;
+    }
+
+    int score()
+    {
+        return m_score;
+    }
+
+    bool isBust()
+    {
+        return (m_score > g_maximumScore);
+    }
+
+    void resolveAces()
+    {
+        if (m_score > g_maximumScore && m_playerAces > 0)
+        {
+            m_score -= 10;
+            --m_playerAces;
+        }
+    }
+};
+
+bool hitOrStick()
 {
-	if (num % 13 == 1)
-		return 11;
-	else if (num % 13 >= 11 || num % 13 == 0)
-		return 10;
-	else
-		return (num % 13);
+    while (true)
+    {
+        std::cout << "(h) to hit, or (s) to stick: ";
+
+        char choice{};
+        std::cin >> choice;
+
+        switch (choice)
+        {
+        case 'h':
+            return true;
+        case 's':
+            return false;
+        }
+    }
 }
 
-// This function generates a number corresponding to a card not yet in play
-int dealCard(std::vector<int>& cardsInPlay)
-{	
-	while (true)
-	{
-		int cardNo{ randomCard(mt) };
-		bool newCard{ true };
-		while (newCard)
-		{
-			for (int i{}; i <= cardsInPlay.size() - 1; ++i)
-			{
-				if (cardsInPlay[i] == cardNo)
-					newCard = false;
-			}
+bool playersGo(Deck& deck, Player& player) // returns true if the player is bust
+{
+    while (true)
+    {
+        if (player.isBust())
+        {
+            std::cout << "You're bust!";
+            return true;
+        }
+        else
+        {
+            if (hitOrStick())
+            {
+                auto card{ player.drawCard(deck) };
+                player.resolveAces();
 
-			if (newCard)
-			{
-				cardsInPlay.push_back(cardNo);
-				return cardNo;
-			}
-		}
-	}
+                std::cout << "You drew the ";
+                card.print();
+                std::cout << " and now have " << player.score() << '\n';
+            }
+            else
+            {
+                // player isn't bust
+                return false;
+            }
+        }
+    }
+    return false;
 }
 
+bool dealersGo(Deck& deck, Player& dealer) // returns true if the dealer is bust
+{
+    while (dealer.score() < g_minimumDealerScore)
+    {
+        auto dealerCard{ dealer.drawCard(deck) };
+        dealer.resolveAces();
 
+        std::cout << "The dealer drew the ";
+        dealerCard.print();
+        std::cout << " and now has " << dealer.score() << '\n';
+    }
+
+    if (dealer.isBust())
+    {
+        std::cout << "The dealer is bust!\n";
+        return true;
+    }
+
+    std::cout << "The dealer sticks on " << dealer.score() << '\n';
+    return false;
+}
+
+bool playBlackjack(Deck& deck)
+{
+    Player dealer{};
+
+    std::cout << "The dealer is showing the ";
+    dealer.drawCard(deck).print();
+    std::cout << '\n' << '\n';
+
+
+    Player player{};
+    std::cout << "Your first card is the ";
+    player.drawCard(deck).print();
+    std::cout << '\n';
+
+    std::cout << "Your second card is the ";
+    player.drawCard(deck).print();
+    std::cout << '\n';
+
+    std::cout << "You have: " << player.score() << '\n';
+
+    if (playersGo(deck, player))
+    {
+        return false;
+    }
+
+    std::cout << '\n';
+
+    if (dealersGo(deck, dealer))
+    {
+        return true;
+    }
+
+    return (player.score() > dealer.score());
+}
+
+bool replay()
+{
+    while (true)
+    {
+        std::cout << "Would you like to play again? \n" << "(y) for yes or (n) for no: ";
+
+        char choice{};
+        std::cin >> choice;
+
+        switch (choice)
+        {
+        case 'y':
+            return true;
+        case 'n':
+            return false;
+        }
+    }
+}
 
 int main()
 {
-	// This preamble tells the player the constant values defined above - it will only show once even if the player plays multiple times
-	(numberOfDecks == 1) ? std::cout << "There is one deck in play," : std::cout << "There are " << numberOfDecks << " decks in play,";
-	std::cout << " the max point value is " << maxHandValue << " and";
-	std::cout << " the dealer will stick on "<< dealerMaxValue << " or more.\n" << '\n';
+    bool play{ true };
+    while (play)
+    {
+        Deck deck{};
 
-	// The player is asked whether they want to play
-	// The playState variable can take value 0 to not start another game, 1 to represent an unfinished game in progress or 2 to represent a game in progress that has finished early
-	std::cout << "Would you like to play Blackjack?" << '\n';
-	int playState{ getInput() };
-	std::cout << '\n';
-	while (playState == 1)
-	{
-		// These variables track the player and dealer's scores and number of aces
-		int playerTotal{};
-		int playerAces{};
-		int dealerTotal{};
-		int dealerAces{};
-		int currentCardNo{};
-		//This vector holds the numbers of the cards in play
-		std::vector<int> cardsInPlay{0};
+        deck.shuffle();
 
-		// The first card is dealt to the player
-		currentCardNo = dealCard(cardsInPlay);
-		std::cout << "Your first card is the ";
-		cardName(currentCardNo);
-		std::cout << '\n';
-		playerTotal += cardValue(currentCardNo);
-		((currentCardNo % 13 == 1) ? ++playerAces : 0);
+        if (playBlackjack(deck))
+        {
+            std::cout << "You win!\n";
+        }
+        else
+        {
+            std::cout << "You lose!\n";
+        }
 
-		// The second card is dealt to the player
-		currentCardNo = dealCard(cardsInPlay);
-		std::cout << "Your second card is the ";
-		cardName(currentCardNo);
-		std::cout << '\n';
-		playerTotal += cardValue(currentCardNo);
-		((currentCardNo % 13 == 1) ? ++playerAces : 0);
+        play = replay();
+        std::cout << '\n';
+    }
 
-		// If the player's score is greater than the max hand value we reduce it by 10 for each Ace they have or declare them bust if they have none
-		while (playerTotal > maxHandValue)
-		{
-			if (playerAces > 0)
-			{
-				--playerAces;
-				playerTotal -= 10;
-			}
-			else
-			{
-				std::cout << "You're bust!\n";
-				playState = 2;
-			}
-		}
 
-		// If the player is bust we skip to the end
-		if (playState != 2)
-		{
-			// The player is asked whether they want to hit and plays until they stick or go bust
-			int hit{ 1 };
-			while (hit == 1)
-			{
-				std::cout << "Would you like to hit? ";
-				hit = getInput();
-				std::cout << '\n';
-				if (hit == 1)
-				{
-					currentCardNo = dealCard(cardsInPlay);
-					std::cout << "Your next card is the ";
-					cardName(currentCardNo);
-					std::cout << '\n';
-					playerTotal += cardValue(currentCardNo);
-					((currentCardNo % 13 == 1) ? ++playerAces : 0);
-					if (playerTotal > maxHandValue)
-					{
-						// The player's score is over the max hand value and they have no aces so they are bust
-						if (playerAces == 0)
-						{
-							std::cout << "You're bust!\n";
-							playState = 2;
-							break;
-						}
-						// The player's score is over the max hand value, but they have an ace worth 11 which can be reduced to 1 so they are not bust
-						else
-						{
-							--playerAces;
-							playerTotal -= 10;
-						}
-					}
-				}
-			}
-		}
-
-		// If the player is bust we skip to the end
-		if (playState != 2)
-		{
-			// Now the dealer plays
-			currentCardNo = dealCard(cardsInPlay);
-			std::cout << "The dealer's first card is the ";
-			cardName(currentCardNo);
-			std::cout << '\n';
-			dealerTotal += cardValue(currentCardNo);
-			((currentCardNo % 13 == 1) ? ++dealerAces : 0);
-
-			// The second card is dealt to the player
-			currentCardNo = dealCard(cardsInPlay);
-			std::cout << "The dealer's second card is the ";
-			cardName(currentCardNo);
-			std::cout << '\n';
-			dealerTotal += cardValue(currentCardNo);
-			((currentCardNo % 13 == 1) ? ++dealerAces : 0);
-			//Deal with two aces case - if playerTotal > maxHandValue the player must have two aces so we reduce it by 11 and "delete" one ace
-			if (dealerTotal > maxHandValue)
-			{
-				--dealerAces;
-				dealerTotal -= 10;
-			}
-
-			int d_hit{ 1 };
-			while (d_hit == 1)
-			{
-				(dealerTotal > 16 ? d_hit = 0 : d_hit = 1);
-				if (d_hit == 1)
-				{
-					currentCardNo = dealCard(cardsInPlay);
-					std::cout << "The dealer hits." << '\n';
-					std::cout << "The dealer draws the ";
-					cardName(currentCardNo);
-					std::cout << '\n';
-					dealerTotal += cardValue(currentCardNo);
-					((currentCardNo % 13 == 1) ? ++dealerAces : 0);
-					if (dealerTotal > maxHandValue)
-					{
-						// The dealer's score is over the max hand value and they have no aces so they are bust
-						if (dealerAces == 0)
-						{
-							std::cout << "The dealer is bust, you win! \n";
-							playState = 2;
-						}
-						// The dealer's score is over the max hand value, but they have an ace worth 11 which can be reduced to 1 so they are not bust
-						else
-						{
-							--dealerAces;
-							dealerTotal -= 10;
-						}
-					}
-				}
-			}
-
-			if (playState != 2)
-			{
-				std::cout << "The dealer sticks. \n";
-
-				// The point totals are evaluated and a winner decided
-				if (playerTotal > dealerTotal)
-					std::cout << "You win! \n";
-				else if (dealerTotal > playerTotal)
-					std::cout << "The dealer wins. \n";
-				else
-					std::cout << "It's a draw. \n";
-			}
-
-		}
-
-		// The player is asked whether they want to play again
-		std::cout << "Would you like to play again?" << '\n';
-		playState = getInput();
-		std::cout << '\n';
-	}
-
-	return 0;
+    return 0;
 }
